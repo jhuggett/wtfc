@@ -1,0 +1,15 @@
+# wtfc config — defines the schema for changes and releases.
+# All fields are optional. Add new ones any time; old data is preserved.
+
+[changeset]
+fields = [
+  { name = "summary",  type = "string" },
+  { name = "type",     type = "enum", values = ["feat", "fix", "chore"] },
+  { name = "audience", type = "list", values = ["public", "internal"] },
+]
+
+[release]
+fields = [
+  { name = "notes",    type = "string" },
+  { name = "audience", type = "list", values = ["public", "internal"] },
+]
