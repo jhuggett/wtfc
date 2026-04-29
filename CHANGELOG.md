@@ -2,6 +2,33 @@
 
 > Newest first.
 
+## v0.1.0 — 2026-04-29
+
+> 7 changes · by Joel Huggett · `deb9c5d`
+
+first published cut
+
+### Features
+
+- wire up GoReleaser + GitHub Actions release workflow + Homebrew tap (jhuggett/homebrew-tap) — `wtfc release vX.Y.Z` auto-tags via the hook and the workflow ships binaries  
+  <sub>Joel Huggett · `2ffcadf`</sub>
+
+### Fixes
+
+- wrap long summaries inside expanded release box instead of stretching it horizontally
+- run auto-fill in MCP propose_change so the preview reflects what create_change will write  
+  <sub>Joel Huggett · `7c8d750`</sub>
+
+### Chores
+
+- fancy CHANGELOG.md hook: type-grouped sections, per-change author/commit, audience tags, release meta line <kbd>internal</kbd>
+- document release-side auto-fill, CHANGELOG.md sample output, and link to dogfooded CHANGELOG.md in README
+- regenerate VHS demos against the auto-fill schema so cards show author/commit metadata
+- record live Claude Code session calling wtfc MCP (claude.gif) — real agent, real tool calls  
+  <sub>Joel Huggett · `7c8d750`</sub>
+
+---
+
 ## 1.4 — 2026-04-29
 
 > 7 changes · by Joel Huggett · `7c8d750`

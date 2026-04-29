@@ -374,6 +374,99 @@
       "name": "1.4",
       "notes": null,
       "released_at": "2026-04-29T02:16:35.163147Z"
+    },
+    {
+      "audience": null,
+      "changes": [
+        {
+          "audience": [
+            "public"
+          ],
+          "author": null,
+          "branch": null,
+          "commit": null,
+          "created_at": "2026-04-29T02:18:05.085382Z",
+          "id": "d2febdd8-3a26-4edd-8e07-876d345180ce",
+          "summary": "wrap long summaries inside expanded release box instead of stretching it horizontally",
+          "type": "fix"
+        },
+        {
+          "audience": [
+            "internal"
+          ],
+          "author": null,
+          "branch": null,
+          "commit": null,
+          "created_at": "2026-04-29T02:33:47.353165Z",
+          "id": "82f5fdd9-cd90-42d2-9107-004c6c9068b3",
+          "summary": "fancy CHANGELOG.md hook: type-grouped sections, per-change author/commit, audience tags, release meta line",
+          "type": "chore"
+        },
+        {
+          "audience": [
+            "public"
+          ],
+          "author": null,
+          "branch": null,
+          "commit": null,
+          "created_at": "2026-04-29T02:33:52.479585Z",
+          "id": "7cb4e4c0-1778-4910-936f-e4fd6dfb45fc",
+          "summary": "document release-side auto-fill, CHANGELOG.md sample output, and link to dogfooded CHANGELOG.md in README",
+          "type": "chore"
+        },
+        {
+          "audience": [
+            "public"
+          ],
+          "author": null,
+          "branch": null,
+          "commit": null,
+          "created_at": "2026-04-29T02:33:55.859184Z",
+          "id": "79f20b9c-782d-416f-bfc1-30c9dd6a32d0",
+          "summary": "regenerate VHS demos against the auto-fill schema so cards show author/commit metadata",
+          "type": "chore"
+        },
+        {
+          "audience": [
+            "public"
+          ],
+          "author": "Joel Huggett",
+          "branch": "main",
+          "commit": "7c8d7507b25c415f2e9fe3ee79d143c82ea5cfd4",
+          "created_at": "2026-04-29T02:39:44.962203Z",
+          "id": "c9311110-eed7-43d3-af2b-1d00864958bc",
+          "summary": "run auto-fill in MCP propose_change so the preview reflects what create_change will write",
+          "type": "fix"
+        },
+        {
+          "audience": [
+            "public"
+          ],
+          "author": "Joel Huggett",
+          "branch": "main",
+          "commit": "7c8d7507b25c415f2e9fe3ee79d143c82ea5cfd4",
+          "created_at": "2026-04-29T02:39:49.994809Z",
+          "id": "602d27e3-02de-4f3e-8c77-8058adc44fbb",
+          "summary": "record live Claude Code session calling wtfc MCP (claude.gif) — real agent, real tool calls",
+          "type": "chore"
+        },
+        {
+          "audience": [
+            "public"
+          ],
+          "author": "Joel Huggett",
+          "branch": "main",
+          "commit": "2ffcadf5f78a46a3f1d122d7fdde8f576456ae40",
+          "created_at": "2026-04-29T12:55:05.66432Z",
+          "id": "7e4e3a68-71cd-47c2-aae5-a2e36207c063",
+          "summary": "wire up GoReleaser + GitHub Actions release workflow + Homebrew tap (jhuggett/homebrew-tap) — `wtfc release vX.Y.Z` auto-tags via the hook and the workflow ships binaries",
+          "type": "feat"
+        }
+      ],
+      "commit": "deb9c5defee1c8ad787bb22fc64a52fa556bbf98",
+      "name": "v0.1.0",
+      "notes": "first published cut",
+      "released_at": "2026-04-29T14:00:03.350899Z"
     }
   ]
 }
