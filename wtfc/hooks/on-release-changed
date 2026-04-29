@@ -142,7 +142,9 @@ if [[ "${WTFC_OP:-}" == "release" ]]; then
       if ! git diff --cached --quiet; then
         git commit -m "release $tag" >/dev/null
       fi
-      git tag "$tag"
+      # Annotated (-a) so `git push --follow-tags` actually pushes it —
+      # lightweight tags get silently skipped by --follow-tags.
+      git tag -a "$tag" -m "release $tag"
       git push origin HEAD --follow-tags
       echo "on-release-changed: pushed tag $tag — release workflow should be running"
     fi
