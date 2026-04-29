@@ -2,6 +2,24 @@
 
 > Newest first.
 
+## v0.2.0 — 2026-04-29
+
+> 2 changes · by Joel Huggett · `ffc8af2`
+
+hook + install docs
+
+### Fixes
+
+- use annotated tags in on-release-changed hook so `git push --follow-tags` actually pushes them <kbd>internal</kbd>  
+  <sub>Joel Huggett · `6cecc35`</sub>
+
+### Chores
+
+- lead the README Install section with `brew install jhuggett/tap/wtfc` and add a concrete curl|tar fallback for when brew isn't available  
+  <sub>Joel Huggett · `6cecc35`</sub>
+
+---
+
 ## v0.1.0 — 2026-04-29
 
 > 7 changes · by Joel Huggett · `deb9c5d`

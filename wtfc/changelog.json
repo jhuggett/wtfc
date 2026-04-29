@@ -467,6 +467,39 @@
       "name": "v0.1.0",
       "notes": "first published cut",
       "released_at": "2026-04-29T14:00:03.350899Z"
+    },
+    {
+      "audience": null,
+      "changes": [
+        {
+          "audience": [
+            "internal"
+          ],
+          "author": "Joel Huggett",
+          "branch": "main",
+          "commit": "6cecc35aa022d089f1f5a224d6949c8a015df641",
+          "created_at": "2026-04-29T14:06:01.136749Z",
+          "id": "70cddfbd-968d-4869-8a48-9f0fa94d3df1",
+          "summary": "use annotated tags in on-release-changed hook so `git push --follow-tags` actually pushes them",
+          "type": "fix"
+        },
+        {
+          "audience": [
+            "public"
+          ],
+          "author": "Joel Huggett",
+          "branch": "main",
+          "commit": "6cecc35aa022d089f1f5a224d6949c8a015df641",
+          "created_at": "2026-04-29T14:17:58.130219Z",
+          "id": "cfa14bdc-4a09-4a14-9fba-97ace9626c29",
+          "summary": "lead the README Install section with `brew install jhuggett/tap/wtfc` and add a concrete curl|tar fallback for when brew isn't available",
+          "type": "chore"
+        }
+      ],
+      "commit": "ffc8af2dac12a1beed70e651774852a56511925f",
+      "name": "v0.2.0",
+      "notes": "hook + install docs",
+      "released_at": "2026-04-29T14:20:43.788873Z"
     }
   ]
 }
