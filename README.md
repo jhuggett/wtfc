@@ -205,13 +205,23 @@ A non-zero exit aborts wtfc with status 1; the underlying mutation stays committ
 
 ## Install
 
+**Homebrew** (macOS / Linux):
 ```sh
-make install        # go install — puts `wtfc` on $GOBIN / $GOPATH/bin
+brew install jhuggett/tap/wtfc
+brew upgrade wtfc          # later, when there's a new release
 ```
 
-Or build locally:
+**Go**:
 ```sh
-make build          # bin/wtfc
+go install github.com/jhuggett/wtfc@latest
+```
+
+**Pre-built binaries** for darwin/linux × amd64/arm64 are attached to every [GitHub release](https://github.com/jhuggett/wtfc/releases) — download the archive for your platform, extract the `wtfc` binary, and put it on your `$PATH`.
+
+**From source**:
+```sh
+make install        # go install into $GOBIN / $GOPATH/bin
+make build          # ./bin/wtfc
 ```
 
 ---

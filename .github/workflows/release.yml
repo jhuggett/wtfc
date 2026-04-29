@@ -1,0 +1,37 @@
+name: release
+
+# Triggered by tag pushes from the on-release-changed hook (which fires
+# whenever `wtfc release vX.Y.Z` runs in this repo). The tag name is the
+# release version — GoReleaser keys off it for binary names, archive
+# names, and the Homebrew formula version.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  goreleaser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: latest
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # PAT with `repo` scope on jhuggett/homebrew-tap so GoReleaser
+          # can commit the updated formula. Add this as an Actions secret
+          # in this repo before the first release runs.
+          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}

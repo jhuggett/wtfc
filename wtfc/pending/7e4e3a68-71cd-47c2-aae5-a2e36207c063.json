@@ -1,0 +1,12 @@
+{
+  "audience": [
+    "public"
+  ],
+  "author": "Joel Huggett",
+  "branch": "main",
+  "commit": "2ffcadf5f78a46a3f1d122d7fdde8f576456ae40",
+  "created_at": "2026-04-29T12:55:05.66432Z",
+  "id": "7e4e3a68-71cd-47c2-aae5-a2e36207c063",
+  "summary": "wire up GoReleaser + GitHub Actions release workflow + Homebrew tap (jhuggett/homebrew-tap) — `wtfc release vX.Y.Z` auto-tags via the hook and the workflow ships binaries",
+  "type": "feat"
+}

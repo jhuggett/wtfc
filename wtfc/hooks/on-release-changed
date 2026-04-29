@@ -117,3 +117,34 @@ jq -r '
 mv "$CHANGELOG.tmp" "$CHANGELOG"
 
 echo "on-release-changed: regenerated $CHANGELOG"
+
+# ── auto-tag + push ───────────────────────────────────────────────────────
+# When `wtfc release vX.Y.Z` lands here, we want a matching git tag so
+# the GitHub Actions release workflow (.github/workflows/release.yml)
+# fires and GoReleaser builds binaries + updates the Homebrew tap. The
+# tag name is the release name, so `wtfc release v0.2.0` → tag `v0.2.0`.
+#
+# Skipped quietly when:
+#   • op is `unrelease` (rolling back shouldn't tag anything),
+#   • there's no `origin` remote (e.g. demo workspaces in /tmp),
+#   • the tag already exists (idempotent — replaying the hook is safe).
+if [[ "${WTFC_OP:-}" == "release" ]]; then
+  cd "$WTFC_PROJECT_ROOT"
+  if git remote get-url origin >/dev/null 2>&1; then
+    tag="$WTFC_RELEASE_NAME"
+    if git rev-parse "$tag" >/dev/null 2>&1; then
+      echo "on-release-changed: tag $tag already exists — not retagging"
+    else
+      # Stage only the changelog artifacts so we don't accidentally
+      # bundle unrelated edits into the release commit. The pending dir
+      # is included because cut releases empty it.
+      git add CHANGELOG.md wtfc/changelog.json wtfc/pending/ 2>/dev/null || true
+      if ! git diff --cached --quiet; then
+        git commit -m "release $tag" >/dev/null
+      fi
+      git tag "$tag"
+      git push origin HEAD --follow-tags
+      echo "on-release-changed: pushed tag $tag — release workflow should be running"
+    fi
+  fi
+fi

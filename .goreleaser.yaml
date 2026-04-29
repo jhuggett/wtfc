@@ -1,0 +1,64 @@
+version: 2
+
+project_name: wtfc
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: wtfc
+    main: .
+    binary: wtfc
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+
+archives:
+  - id: wtfc
+    formats: [tar.gz]
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+
+checksum:
+  name_template: 'checksums.txt'
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  # We hand-curate CHANGELOG.md via the wtfc hook — skip GoReleaser's
+  # auto-generated commit log on the release page.
+  disable: true
+
+release:
+  draft: false
+  prerelease: auto
+
+# Homebrew tap. The formula is committed to jhuggett/homebrew-tap on each
+# release, so `brew install jhuggett/tap/wtfc` always points at the latest
+# tagged version and `brew upgrade wtfc` does the right thing.
+brews:
+  - name: wtfc
+    homepage: https://github.com/jhuggett/wtfc
+    description: "Schema-driven changelog tool with TUI, CLI, and MCP server"
+    license: MIT
+    repository:
+      owner: jhuggett
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    directory: Formula
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com
+    install: |
+      bin.install "wtfc"
+    test: |
+      system "#{bin}/wtfc", "help"
