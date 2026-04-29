@@ -1,0 +1,119 @@
+#!/bin/bash
+# ──────────────────────────────────────────────────────────────────────────
+# wtfc on-release-changed hook
+#
+# Fires whenever the changelog mutates — both `wtfc release` AND
+# `wtfc unrelease`. WTFC_OP tells you which one: "release" or "unrelease".
+# Branch on WTFC_OP if you want asymmetric behavior (e.g. post to Slack
+# on release only, do nothing on unrelease).
+#
+# Quick reference:
+#   Stdin           — the full Changelog JSON (all releases, oldest first).
+#   Working dir     — your project root (parent of wtfc/).
+#   Env vars        — WTFC_EVENT, WTFC_OP, WTFC_RELEASE_NAME,
+#                     WTFC_PROJECT_ROOT, WTFC_DIR, WTFC_CHANGELOG_PATH,
+#                     WTFC_PENDING_DIR.
+#   Exit code       — 0 = ok. Non-zero exits wtfc with status 1; the
+#                     mutation stays committed (changelog is authoritative).
+#
+# Regenerates CHANGELOG.md from full release history every fire.
+# Idempotent — safe under both release and unrelease.
+#
+# Output format:
+#   • Each release as `## name — date` with a meta line summarising
+#     change-count, contributors, and release commit.
+#   • Changes grouped by type: Features → Fixes → Chores → Other.
+#   • Every change carries a sub-line with author and short commit
+#     (rendered when the schema has those fields populated).
+#   • Internal-audience changes get an inline `internal` tag.
+# ──────────────────────────────────────────────────────────────────────────
+
+set -euo pipefail
+
+if ! command -v jq >/dev/null 2>&1; then
+  echo "on-release-changed: jq not found; install jq or rewrite this hook" >&2
+  exit 1
+fi
+
+CHANGELOG="$WTFC_PROJECT_ROOT/CHANGELOG.md"
+PAYLOAD=$(cat)
+
+jq -r '
+  def short_sha:
+    if . == null or . == "" then ""
+    elif (. | length) >= 7 then .[0:7]
+    else .
+    end;
+
+  def type_label(t):
+    if   t == "feat"  then "Features"
+    elif t == "fix"   then "Fixes"
+    elif t == "chore" then "Chores"
+    elif t == null    then "Other"
+    else t
+    end;
+
+  # Per-change author/commit/branch line. Branch is omitted when it is
+  # the conventional "main" — too noisy when nearly every entry shares it.
+  def author_meta:
+    [
+      (.author // "" | select(. != "")),
+      ((.commit | short_sha) | select(. != "") | "`" + . + "`"),
+      (.branch // "" | select(. != "" and . != "main"))
+    ] | join(" · ");
+
+  def audience_tag:
+    if (.audience // []) | any(. == "internal")
+    then " <kbd>internal</kbd>" else "" end;
+
+  def render_change:
+    "- " + (.summary // .id) + audience_tag
+    + (author_meta as $a
+       | if $a != "" then "  \n  <sub>" + $a + "</sub>" else "" end);
+
+  # Render type-grouped sections in a fixed priority order, then anything
+  # outside the known set under "Other". group_by sorts alphabetically,
+  # which would put fix before feat — explicit ordering reads better.
+  def render_groups($changes):
+    [
+      (["feat","fix","chore"][] as $t
+       | ($changes | map(select(.type == $t))) as $g
+       | select(($g | length) > 0)
+       | "### " + type_label($t) + "\n\n"
+         + ($g | map(render_change) | join("\n"))),
+      (($changes | map(select(.type as $tt
+                              | $tt != "feat" and $tt != "fix" and $tt != "chore"))) as $rest
+       | select(($rest | length) > 0)
+       | "### Other\n\n"
+         + ($rest | map(render_change) | join("\n")))
+    ] | join("\n\n");
+
+  # Release meta-line: "<n> change(s) · by <authors> · `<sha>`". Each
+  # segment drops out cleanly when its source field is missing.
+  def release_meta:
+    ((.changes // []) | length) as $n
+    | ((.changes // []) | map(.author // "" | select(. != "")) | unique) as $authors
+    | [
+        ($n | tostring) + " change" + (if $n == 1 then "" else "s" end),
+        (if ($authors | length) == 0 then empty
+         elif ($authors | length) == 1 then "by " + $authors[0]
+         elif ($authors | length) == 2 then "by " + $authors[0] + " & " + $authors[1]
+         else "by " + ($authors[0:length-1] | join(", ")) + " & " + $authors[-1]
+         end),
+        ((.commit | short_sha) | select(. != "") | "`" + . + "`")
+      ] | map(select(. != null and . != "")) | join(" · ");
+
+  def render_release:
+    "## " + .name + " — " + ((.released_at // "") | split("T")[0]) + "\n\n"
+    + (release_meta as $m | if $m != "" then "> " + $m + "\n\n" else "" end)
+    + (if (.notes // "") != "" then .notes + "\n\n" else "" end)
+    + render_groups(.changes // []);
+
+  "# Changelog\n\n> Newest first.\n\n"
+  + ((.releases // []) | reverse | map(render_release) | join("\n\n---\n\n"))
+  + "\n"
+' <<<"$PAYLOAD" > "$CHANGELOG.tmp"
+
+mv "$CHANGELOG.tmp" "$CHANGELOG"
+
+echo "on-release-changed: regenerated $CHANGELOG"

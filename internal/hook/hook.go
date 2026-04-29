@@ -17,14 +17,25 @@ import (
 
 const Dir = "hooks"
 
-// Known events. Hook scripts should be placed at wtfc/hooks/<event>.
+// Hook scripts should be placed at wtfc/hooks/<event>.
+//
+// on-release-changed fires whenever release history mutates — both
+// `wtfc release` and `wtfc unrelease`. The hook receives the full
+// Changelog JSON on stdin and the WTFC_OP env var ("release" or
+// "unrelease") so it can branch on what just happened. One event keeps
+// the model small; asymmetric hooks (e.g. post to Slack on release
+// only) check WTFC_OP.
+const EventOnReleaseChanged = "on-release-changed"
+
+// Op values for WTFC_OP. Identifies the user-facing operation that
+// triggered the hook.
 const (
-	EventPostRelease   = "post-release"
-	EventPostUnrelease = "post-unrelease"
+	OpRelease   = "release"
+	OpUnrelease = "unrelease"
 )
 
 // KnownEvents is the canonical list of events the runtime fires.
-var KnownEvents = []string{EventPostRelease, EventPostUnrelease}
+var KnownEvents = []string{EventOnReleaseChanged}
 
 func isKnownEvent(name string) bool {
 	for _, e := range KnownEvents {

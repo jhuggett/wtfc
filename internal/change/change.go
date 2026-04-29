@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jhuggett/wtfc/internal/auto"
 	"github.com/jhuggett/wtfc/internal/config"
 )
 
@@ -88,6 +89,42 @@ func New(cfg *config.Config, values map[string]string) (*Change, error) {
 	}, nil
 }
 
+// NewFromValues is like New but takes already-typed values (e.g. from a
+// JSON object). The values map should be in canonical form per the schema
+// (string for enum, []string or []any for list, bool, int, etc). Unknown
+// fields are accepted and stored as-is.
+func NewFromValues(cfg *config.Config, values map[string]any) *Change {
+	fields := map[string]any{}
+	for _, f := range cfg.Changeset.Fields {
+		fields[f.Name] = nil
+	}
+	for k, v := range values {
+		if k == "id" || k == "created_at" {
+			continue
+		}
+		fields[k] = v
+	}
+	return &Change{
+		ID:        uuid.NewString(),
+		CreatedAt: time.Now().UTC(),
+		Fields:    fields,
+	}
+}
+
+// CoerceFields converts a string flag map into typed values per the schema.
+// Mirrors release.CoerceFields so the CLI can merge --field with --json.
+func CoerceFields(schema []config.Field, raw map[string]string) (map[string]any, error) {
+	out := map[string]any{}
+	for k, v := range raw {
+		coerced, err := coerce(schema, k, v)
+		if err != nil {
+			return nil, err
+		}
+		out[k] = coerced
+	}
+	return out, nil
+}
+
 // coerce turns the CLI string into the appropriate Go type given the schema.
 // Unknown fields fall back to string.
 func coerce(schema []config.Field, key, raw string) (any, error) {
@@ -125,13 +162,37 @@ func coerce(schema []config.Field, key, raw string) (any, error) {
 	return raw, nil
 }
 
+// Apply merges values into this change's Fields. Provided keys overwrite;
+// absent keys are left untouched. Pass null to clear a field. id and
+// created_at are read-only and skipped.
+func (c *Change) Apply(values map[string]any) {
+	if c.Fields == nil {
+		c.Fields = map[string]any{}
+	}
+	for k, v := range values {
+		if k == "id" || k == "created_at" {
+			continue
+		}
+		c.Fields[k] = v
+	}
+}
+
 // Path returns where this change should be written.
 func (c *Change) Path(cfg *config.Config) string {
 	return filepath.Join(cfg.PendingDir(), c.ID+".json")
 }
 
 // Write persists the change file, creating the pending dir if needed.
+// Validates required fields against the configured changeset schema —
+// every entry point (TUI / CLI / MCP) ultimately routes through Write,
+// so this is the single enforcement boundary. Auto-fill resolution
+// (e.g. `source = "git.user"`) runs first so user-provided values win
+// but missing slots still get populated before validation.
 func (c *Change) Write(cfg *config.Config) error {
+	auto.Resolve(cfg.ProjectRoot(), cfg.Changeset.Fields, c.Fields)
+	if err := config.Validate(cfg.Changeset.Fields, c.Fields); err != nil {
+		return err
+	}
 	if err := os.MkdirAll(cfg.PendingDir(), 0o755); err != nil {
 		return err
 	}
@@ -140,6 +201,39 @@ func (c *Change) Write(cfg *config.Config) error {
 		return err
 	}
 	return os.WriteFile(c.Path(cfg), data, 0o644)
+}
+
+// FindByID locates a single pending change file by id (full UUID or any
+// prefix that uniquely identifies one). Returns the change, its file path,
+// and ErrAmbiguous if the prefix matches more than one, or ErrNotFound if
+// nothing matches.
+func FindByID(cfg *config.Config, id string) (*Change, string, error) {
+	if id == "" {
+		return nil, "", fmt.Errorf("id required")
+	}
+	changes, paths, err := List(cfg)
+	if err != nil {
+		return nil, "", err
+	}
+	var hits []int
+	for i, c := range changes {
+		if c.ID == id || strings.HasPrefix(c.ID, id) {
+			hits = append(hits, i)
+		}
+	}
+	switch len(hits) {
+	case 0:
+		return nil, "", fmt.Errorf("no pending change matches %q", id)
+	case 1:
+		return changes[hits[0]], paths[hits[0]], nil
+	default:
+		var matches []string
+		for _, h := range hits {
+			matches = append(matches, changes[h].ID)
+		}
+		return nil, "", fmt.Errorf("id %q matches %d changes: %s",
+			id, len(hits), strings.Join(matches, ", "))
+	}
 }
 
 // List returns all pending change files, sorted by CreatedAt ascending.

@@ -1,0 +1,62 @@
+#!/bin/bash
+# ──────────────────────────────────────────────────────────────────────────
+# wtfc on-release-changed hook (sample)
+#
+# Fires whenever the changelog mutates — both `wtfc release` AND
+# `wtfc unrelease`. WTFC_OP tells you which one: "release" or "unrelease".
+# Branch on WTFC_OP if you want asymmetric behavior (e.g. post to Slack on
+# release only, do nothing on unrelease).
+#
+# To enable this sample:
+#   mv wtfc/hooks/on-release-changed.sample wtfc/hooks/on-release-changed
+#   chmod +x wtfc/hooks/on-release-changed
+#
+# Quick reference:
+#   Stdin           — the full Changelog JSON (all releases, oldest first).
+#   Working dir     — your project root (parent of wtfc/).
+#   Env vars        — WTFC_EVENT, WTFC_OP, WTFC_RELEASE_NAME,
+#                     WTFC_PROJECT_ROOT, WTFC_DIR, WTFC_CHANGELOG_PATH,
+#                     WTFC_PENDING_DIR.
+#   Exit code       — 0 = ok. Non-zero exits wtfc with status 1; the
+#                     mutation stays committed (changelog is authoritative).
+#
+# Full docs: see docs/hooks.md in the wtfc source repo.
+#
+# This sample regenerates CHANGELOG.md from full release history every
+# time. Idempotent — safe under both release and unrelease. Requires `jq`.
+# ──────────────────────────────────────────────────────────────────────────
+
+set -euo pipefail
+
+if ! command -v jq >/dev/null 2>&1; then
+  echo "on-release-changed: jq not found; install jq or rewrite this hook" >&2
+  exit 1
+fi
+
+CHANGELOG="$WTFC_PROJECT_ROOT/CHANGELOG.md"
+PAYLOAD=$(cat)
+
+# Render newest release first. Each release becomes a markdown section with
+# its name, date, optional notes, and a bulleted list of changes.
+jq -r '
+  (.releases // [])
+  | reverse
+  | map(
+      "## \(.name) — \((.released_at // "") | split("T")[0])\n"
+      + (if (.notes // "") != "" then "\n\(.notes)\n" else "" end)
+      + "\n"
+      + (
+          (.changes // [])
+          | map("- " + (.summary // .id)
+                + (if .type then " _(\(.type))_" else "" end))
+          | join("\n")
+        )
+    )
+  | join("\n\n")
+' <<<"$PAYLOAD" > "$CHANGELOG.tmp"
+
+# Trailing newline for tidy diffs.
+printf '\n' >> "$CHANGELOG.tmp"
+mv "$CHANGELOG.tmp" "$CHANGELOG"
+
+echo "on-release-changed: regenerated $CHANGELOG"

@@ -13,11 +13,367 @@
           "id": "8fb39fd7-c9da-4e65-a0fe-c294da066504",
           "summary": "test",
           "type": "feat"
+        },
+        {
+          "audience": null,
+          "created_at": "2026-04-26T18:19:19.99891Z",
+          "id": "11b6fbd0-177a-4832-9b32-90c071def61e",
+          "summary": null,
+          "type": null
+        }
+      ],
+      "name": "test",
+      "notes": null,
+      "released_at": "2026-04-26T23:48:10.986476Z"
+    },
+    {
+      "audience": [
+        "public"
+      ],
+      "changes": [
+        {
+          "audience": [
+            "public"
+          ],
+          "created_at": "2026-04-27T21:21:13.333926Z",
+          "id": "f00f7d49-317f-4358-8354-cf0cf7c75c07",
+          "summary": "ship MCP server with update_change tool",
+          "type": "feat"
+        },
+        {
+          "audience": [
+            "internal"
+          ],
+          "created_at": "2026-04-27T21:21:13.33992Z",
+          "id": "18505ebe-05c9-4211-878b-82275f8c550c",
+          "summary": "fix list_pending_changes structuredContent schema",
+          "type": "fix"
+        },
+        {
+          "audience": [
+            "public"
+          ],
+          "created_at": "2026-04-27T21:21:13.3452Z",
+          "id": "ecaa1b47-737e-4044-9c2c-2361fa74989c",
+          "summary": "simplify hooks to single post-changelog event",
+          "type": "feat"
+        },
+        {
+          "audience": [
+            "public"
+          ],
+          "created_at": "2026-04-27T21:21:13.350396Z",
+          "id": "b229f52a-b12c-4a8a-8d25-423873b5ca6f",
+          "summary": "redesign TUI as a centered vertical timeline",
+          "type": "feat"
         }
       ],
       "name": "1.0",
       "notes": null,
-      "released_at": "2026-04-26T18:10:43.462419Z"
+      "released_at": "2026-04-27T22:31:22.658154Z"
+    },
+    {
+      "audience": [
+        "public"
+      ],
+      "changes": [
+        {
+          "audience": [
+            "internal"
+          ],
+          "created_at": "2026-04-27T22:31:34.126154Z",
+          "id": "002b445e-dd46-4feb-b287-3bb06b89d18b",
+          "summary": "this is a test",
+          "type": "feat"
+        },
+        {
+          "audience": [
+            "internal"
+          ],
+          "created_at": "2026-04-28T01:56:23.080173Z",
+          "id": "0ab087bf-703b-4fdc-a546-c8853c6ebedf",
+          "summary": "abc",
+          "type": "fix"
+        },
+        {
+          "audience": [
+            "public"
+          ],
+          "created_at": "2026-04-28T01:56:38.458372Z",
+          "id": "8e3c0661-dd3c-43f7-acbd-0a2ab72877df",
+          "summary": "123",
+          "type": "feat"
+        }
+      ],
+      "name": "1.1",
+      "notes": null,
+      "released_at": "2026-04-28T01:58:43.927362Z"
+    },
+    {
+      "audience": [
+        "public"
+      ],
+      "changes": [
+        {
+          "audience": [
+            "internal"
+          ],
+          "created_at": "2026-04-28T02:00:59.176376Z",
+          "id": "2fd99f43-ead0-4d17-b3d6-e709a9cf764d",
+          "summary": "test",
+          "type": "fix"
+        },
+        {
+          "audience": [
+            "public"
+          ],
+          "created_at": "2026-04-28T12:18:09.984669Z",
+          "id": "6fe2228a-baec-4bab-b9d6-be7932d84887",
+          "summary": "test",
+          "type": "feat"
+        },
+        {
+          "audience": null,
+          "created_at": "2026-04-28T15:32:15.33831Z",
+          "id": "6b445bc0-8639-4add-9053-6be0223c6017",
+          "summary": "somethingg",
+          "type": null
+        }
+      ],
+      "name": "1.2",
+      "notes": null,
+      "released_at": "2026-04-28T19:19:36.494697Z"
+    },
+    {
+      "audience": [
+        "public"
+      ],
+      "changes": [
+        {
+          "audience": [
+            "public"
+          ],
+          "created_at": "2026-04-28T19:57:53.726903Z",
+          "id": "cd0f35a2-7687-4a3b-90ff-0374796fc538",
+          "summary": "ship MCP server with full change-management toolset (get_schema, list_pending_changes, propose_change, create_change, update_change, delete_change)",
+          "type": "feat"
+        },
+        {
+          "audience": [
+            "internal"
+          ],
+          "created_at": "2026-04-28T19:57:58.698368Z",
+          "id": "f41f94ae-e10c-4c5e-8c6c-672c3b51bb67",
+          "summary": "list_pending_changes structuredContent must be a record, not an array",
+          "type": "fix"
+        },
+        {
+          "audience": [
+            "internal"
+          ],
+          "created_at": "2026-04-28T19:58:02.802596Z",
+          "id": "3a968633-d515-40cb-a8ef-a85a99965544",
+          "summary": "tighten MCP tool descriptions and add server-level workflow instructions",
+          "type": "chore"
+        },
+        {
+          "audience": [
+            "public"
+          ],
+          "created_at": "2026-04-28T19:58:08.03828Z",
+          "id": "41afe893-fae5-4eb7-a8d3-ff551a02ad18",
+          "summary": "simplify hooks to a single post-changelog event with WTFC_OP env var",
+          "type": "feat"
+        },
+        {
+          "audience": [
+            "public"
+          ],
+          "created_at": "2026-04-28T19:58:14.254004Z",
+          "id": "0c9a5c3f-2b9a-4835-9e91-7b5dc1cd1e22",
+          "summary": "scaffolded post-changelog hook regenerates CHANGELOG.md from authoritative state, idempotent under release and unrelease",
+          "type": "feat"
+        },
+        {
+          "audience": [
+            "public"
+          ],
+          "created_at": "2026-04-28T19:58:19.066858Z",
+          "id": "0913a0a7-a544-4ca1-be93-c433b949ea55",
+          "summary": "redesign TUI as a centered vertical timeline with track/cut fork, pending and released sections",
+          "type": "feat"
+        },
+        {
+          "audience": [
+            "public"
+          ],
+          "created_at": "2026-04-28T19:58:24.514771Z",
+          "id": "70ce043c-a422-43d6-be79-6cd3fd93b111",
+          "summary": "render TUI forms as a centered modal floating over a dimmed timeline backdrop",
+          "type": "feat"
+        },
+        {
+          "audience": [
+            "public"
+          ],
+          "created_at": "2026-04-28T19:58:30.39477Z",
+          "id": "53f723f5-6d88-4e14-841c-6928a75567d3",
+          "summary": "add bottom-right toast notifications with 3-second auto-dismiss",
+          "type": "feat"
+        },
+        {
+          "audience": [
+            "public"
+          ],
+          "created_at": "2026-04-28T19:58:36.220146Z",
+          "id": "b47afa12-4119-4aa7-8e53-863a8e1b6bbe",
+          "summary": "single-expand release mode where the medallion morphs into a unified container holding its changes",
+          "type": "feat"
+        },
+        {
+          "audience": [
+            "public"
+          ],
+          "created_at": "2026-04-28T19:58:43.441633Z",
+          "id": "4ba0b947-ff8f-4177-99d7-3bb337ca042a",
+          "summary": "edit and delete pending changes directly from the timeline (e/d/enter)",
+          "type": "feat"
+        },
+        {
+          "audience": [
+            "public"
+          ],
+          "created_at": "2026-04-28T19:58:48.560502Z",
+          "id": "a3b7783f-752f-4093-a182-b7a9a9aff810",
+          "summary": "confirmation modal before destructive actions like unrelease",
+          "type": "feat"
+        },
+        {
+          "audience": [
+            "public"
+          ],
+          "created_at": "2026-04-28T19:58:53.598298Z",
+          "id": "194280d3-94f3-4ff5-b36a-f24cef573cc0",
+          "summary": "schema `required` flag enforced uniformly from TUI/CLI/MCP via shared validator at the write boundary",
+          "type": "feat"
+        },
+        {
+          "audience": [
+            "public"
+          ],
+          "created_at": "2026-04-28T19:58:58.666941Z",
+          "id": "8c389131-5ec9-4ce5-a760-f8b08537200e",
+          "summary": "`wtfc change edit \u003cid\u003e` CLI subcommand for partial-update edits preserving id and created_at",
+          "type": "feat"
+        },
+        {
+          "audience": [
+            "internal"
+          ],
+          "created_at": "2026-04-28T19:59:04.113735Z",
+          "id": "40f572da-4ece-4d41-80c3-a5e64d59767b",
+          "summary": "gitignore bin/ and untrack the built binary",
+          "type": "chore"
+        }
+      ],
+      "name": "1.3",
+      "notes": null,
+      "released_at": "2026-04-28T20:22:49.05401Z"
+    },
+    {
+      "audience": [
+        "public"
+      ],
+      "changes": [
+        {
+          "audience": [
+            "public"
+          ],
+          "author": "Joel Huggett",
+          "branch": "main",
+          "commit": "7c8d7507b25c415f2e9fe3ee79d143c82ea5cfd4",
+          "created_at": "2026-04-29T02:07:13.547995Z",
+          "id": "1012775d-02f7-4c38-a66d-382504671b57",
+          "summary": "add source schema attribute for declaring auto-fill providers on fields",
+          "type": "feat"
+        },
+        {
+          "audience": [
+            "internal"
+          ],
+          "author": "Joel Huggett",
+          "branch": "main",
+          "commit": "7c8d7507b25c415f2e9fe3ee79d143c82ea5cfd4",
+          "created_at": "2026-04-29T02:07:21.073556Z",
+          "id": "2870038d-a3ca-4903-99f2-ec25a99c87fd",
+          "summary": "build internal/auto package with git and system source resolvers",
+          "type": "feat"
+        },
+        {
+          "audience": [
+            "internal"
+          ],
+          "author": "Joel Huggett",
+          "branch": "main",
+          "commit": "7c8d7507b25c415f2e9fe3ee79d143c82ea5cfd4",
+          "created_at": "2026-04-29T02:07:28.575652Z",
+          "id": "25430028-276b-46c2-8846-688681f69e31",
+          "summary": "wire auto.Resolve into change.Write and release.Cut so every entry point auto-fills uniformly",
+          "type": "feat"
+        },
+        {
+          "audience": [
+            "public"
+          ],
+          "author": "Joel Huggett",
+          "branch": "main",
+          "commit": "7c8d7507b25c415f2e9fe3ee79d143c82ea5cfd4",
+          "created_at": "2026-04-29T02:07:35.449302Z",
+          "id": "1507c32f-8e97-49db-b54e-1e313ada43f8",
+          "summary": "pre-fill TUI form modal with auto-resolved values so users see git context before submit",
+          "type": "feat"
+        },
+        {
+          "audience": [
+            "internal"
+          ],
+          "author": "Joel Huggett",
+          "branch": "main",
+          "commit": "7c8d7507b25c415f2e9fe3ee79d143c82ea5cfd4",
+          "created_at": "2026-04-29T02:07:42.862887Z",
+          "id": "37f6061a-06b2-4d4c-b113-b13c96901869",
+          "summary": "add author/commit/branch auto-fields to wtfc's own changeset and release schema",
+          "type": "chore"
+        },
+        {
+          "audience": [
+            "public"
+          ],
+          "author": "Joel Huggett",
+          "branch": "main",
+          "commit": "7c8d7507b25c415f2e9fe3ee79d143c82ea5cfd4",
+          "created_at": "2026-04-29T02:07:51.322114Z",
+          "id": "28fee596-f01f-40b6-a193-1f8791f22517",
+          "summary": "document source attribute and built-in auto-fill sources in README and init scaffold",
+          "type": "chore"
+        },
+        {
+          "audience": [
+            "public"
+          ],
+          "author": "Joel Huggett",
+          "branch": "main",
+          "commit": "7c8d7507b25c415f2e9fe3ee79d143c82ea5cfd4",
+          "created_at": "2026-04-29T02:07:58.420952Z",
+          "id": "c6678903-fb3e-4d35-aa76-5e565c51ace5",
+          "summary": "add VHS-recorded TUI/CLI/MCP demos and rewrite README around them",
+          "type": "chore"
+        }
+      ],
+      "commit": "7c8d7507b25c415f2e9fe3ee79d143c82ea5cfd4",
+      "name": "1.4",
+      "notes": null,
+      "released_at": "2026-04-29T02:16:35.163147Z"
     }
   ]
 }

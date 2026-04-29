@@ -5,15 +5,31 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/jhuggett/wtfc/internal/auto"
 	"github.com/jhuggett/wtfc/internal/change"
 	"github.com/jhuggett/wtfc/internal/config"
 	"github.com/jhuggett/wtfc/internal/hook"
 	"github.com/jhuggett/wtfc/internal/release"
 )
+
+// flashTTL is how long a toast stays on screen before auto-dismissing.
+const flashTTL = 3 * time.Second
+
+// flashTickMsg drives the toast auto-dismiss timer. The model schedules
+// one on Init and re-schedules from Update so we can poll the flash's
+// age without burdening every flash-setting call site with cmd plumbing.
+type flashTickMsg struct{}
+
+// ansiCSI matches ANSI Control Sequence Introducer sequences (e.g. SGR
+// color/style codes). Used to strip styling from the timeline backdrop
+// before re-rendering it dimmed under a modal.
+var ansiCSI = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
 
 // Run launches the TUI, blocking until the user quits.
 func Run() error {
@@ -63,20 +79,28 @@ func pickConfig() (*config.Config, error) {
 // ── palette + styles ─────────────────────────────────────────────────────
 
 var (
-	cBrand   = lipgloss.Color("213") // magenta — primary brand
-	cAccent  = lipgloss.Color("75")  // cyan — secondary highlights
-	cFg      = lipgloss.Color("252") // body text
-	cDim     = lipgloss.Color("244") // muted body
-	cMuted   = lipgloss.Color("239") // borders, separators
-	cSuccess = lipgloss.Color("78")
-	cWarning = lipgloss.Color("220")
-	cDanger  = lipgloss.Color("203")
-	cPanel   = lipgloss.Color("236") // status bar background
+	// Gruvbox Dark palette. Warm, earthy, easy on the eyes. Primary is
+	// gruvbox yellow (#fabd2f); fg is cream (#ebdbb2); accents in burnt
+	// orange and gruvbox green/red for semantic colours.
+	cBrand     = lipgloss.Color("214") // gruvbox yellow — titles, brand
+	cBrandSoft = lipgloss.Color("223") // cream — chip text on tinted bg
+	cBrandDim  = lipgloss.Color("172") // muted gold — borders, accents
+	cAccent    = lipgloss.Color("208") // burnt orange — secondary highlights
+	cFg        = lipgloss.Color("223") // cream — body text
+	cDim       = lipgloss.Color("246") // dim cream
+	cMuted     = lipgloss.Color("239") // separators
+	cSuccess   = lipgloss.Color("142") // gruvbox green
+	cWarning   = lipgloss.Color("208") // burnt orange (yellow is brand)
+	cDanger    = lipgloss.Color("167") // gruvbox red
+	cPanelBg   = lipgloss.Color("235") // gruvbox bg0 — status bar
+	cChipBg    = lipgloss.Color("237") // gruvbox bg1 — active chip bg
+	cChipDimBg = lipgloss.Color("236") // between bg0/bg1 — muted chip bg
+	cSelBg     = lipgloss.Color("237") // selected row bg (subtle lift)
 )
 
 var (
 	titleStyle  = lipgloss.NewStyle().Bold(true).Foreground(cBrand)
-	h2Style     = lipgloss.NewStyle().Bold(true).Foreground(cAccent)
+	h2Style     = lipgloss.NewStyle().Bold(true).Foreground(cBrand)
 	bodyStyle   = lipgloss.NewStyle().Foreground(cFg)
 	dimStyle    = lipgloss.NewStyle().Foreground(cDim)
 	mutedStyle  = lipgloss.NewStyle().Foreground(cMuted)
@@ -87,24 +111,45 @@ var (
 
 	panelStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(cMuted).
+			BorderForeground(cBrandDim).
 			Padding(1, 2)
 
 	statusBarStyle = lipgloss.NewStyle().
 			Foreground(cFg).
-			Background(cPanel).
+			Background(cPanelBg).
 			Padding(0, 1)
 
-	chipStyle = lipgloss.NewStyle().
+	// Inline tag: colored text with no background. Used wherever chips
+	// would cluster (field values, breakdown counts) — backgrounds at that
+	// density turn the screen into a wall of grey blocks.
+	tagStyle    = lipgloss.NewStyle().Foreground(cBrand).Bold(true)
+	tagDimStyle = lipgloss.NewStyle().Foreground(cDim)
+
+	// brandDimStyle: muted-gold foreground for line work (spine connectors,
+	// unfocused card borders). Same family as the brand yellow so the
+	// line color reads consistently across the timeline; focused elements
+	// jump to the brighter tagStyle.
+	brandDimStyle = lipgloss.NewStyle().Foreground(cBrandDim)
+
+	// lineStyle: neutral grey for unfocused chrome (spine + card borders).
+	// Going grey instead of muted-gold keeps the timeline structure quiet
+	// so focused (brand yellow) elements pop hard. This is the difference
+	// between "everything is brand-coloured" and "the cursor is obvious".
+	lineStyle = lipgloss.NewStyle().Foreground(cMuted)
+
+	// softTagStyle: muted-gold for inline tag values inside cards (feat,
+	// public, internal, etc). Uses cBrandDim, no bold. Reserves the
+	// brighter tagStyle for the diamond ◆ and focused borders so the
+	// diamond reads as each card's visual anchor.
+	softTagStyle = lipgloss.NewStyle().Foreground(cBrandDim)
+
+	// Selected-row tint: subtle dark lift with gold fg so the cursor
+	// reads at a glance without screaming.
+	selRowStyle = lipgloss.NewStyle().
 			Foreground(cBrand).
-			Background(cPanel).
-			Padding(0, 1).
+			Background(cSelBg).
 			Bold(true)
-
-	menuSelStyle = lipgloss.NewStyle().Foreground(cBrand).Bold(true)
 )
-
-const tagline = "changelogs, but make 'em fun"
 
 // ── picker (multi-config disambiguation) ──────────────────────────────────
 
@@ -162,17 +207,16 @@ func (m pickerModel) View() string {
 	return b.String()
 }
 
-// ── main menu ─────────────────────────────────────────────────────────────
+// ── main model ────────────────────────────────────────────────────────────
 
 type screen int
 
 const (
-	screenMenu screen = iota
-	screenPending
-	screenHistory
+	screenTimeline screen = iota
 	screenForm
 	screenHooks
 	screenHookOutput
+	screenConfirm
 )
 
 // formKind selects which submit action runs when the user hits enter on the
@@ -187,35 +231,45 @@ const (
 type mainModel struct {
 	cfg           *config.Config
 	screen        screen
-	cursor        int
-	menu          []string
 	flash         string
 	flashOK       bool
+	flashSetAt    time.Time
 	width, height int
 
-	// live stats for the status bar / menu badges
-	pendingCount int
-	releaseCount int
-	lastRelease  string
+	// timeline screen — the home view. pending is newest-pending-first;
+	// releases is newest-first (via cl.History()). lastForkCursor
+	// remembers which fork node (0 = add-change, 1 = next-release) the
+	// cursor last visited so ↑ from first pending returns to the same
+	// side of the fork.
+	pending         []*change.Change
+	releases        []*release.Release
+	timelineCursor  int
+	timelineScroll  int
+	lastForkCursor  int
+	expandedRelease int // index of expanded release, or -1 for none
 
-	// pending screen
-	pending []*change.Change
-
-	// history screen
-	releases []*release.Release
-
-	// form state (used for both change and release flows)
-	formKind   formKind
-	formTitle  string
-	formSchema []config.Field
-	formFields []formField
-	formCursor int
+	// form state (used for both change and release flows). When
+	// formChangeID is set during a formChange flow, we're editing that
+	// existing change instead of creating a new one.
+	formKind     formKind
+	formTitle    string
+	formSchema   []config.Field
+	formFields   []formField
+	formCursor   int
+	formChangeID string
 
 	// hooks screen
 	hooks        []hook.Entry
 	hookCursor   int
 	hookOutput   string
 	hookOutTitle string
+
+	// confirmation modal — shown over the timeline before destructive
+	// actions. confirmKind identifies which action to take on confirm
+	// ("unrelease" today; more later); confirmPrompt is the question
+	// shown to the user.
+	confirmKind   string
+	confirmPrompt string
 }
 
 // formField holds the in-progress value for one schema field. Only the
@@ -228,161 +282,95 @@ type formField struct {
 
 func newMainModel(cfg *config.Config) mainModel {
 	m := mainModel{
-		cfg:    cfg,
-		screen: screenMenu,
-		menu: []string{
-			"Create a change",
-			"View pending changes",
-			"Cut a release",
-			"Unrelease",
-			"Release history",
-			"Hooks",
-			"Quit",
-		},
+		cfg:             cfg,
+		screen:          screenTimeline,
+		expandedRelease: -1,
 	}
-	m.refreshStats()
+	m.refreshTimeline()
 	return m
 }
 
-func (m mainModel) Init() tea.Cmd { return nil }
+func (m mainModel) Init() tea.Cmd { return flashTick() }
 
-// menuIcons mirrors `menu` 1:1.
-var menuIcons = []string{"✎", "▤", "▲", "↺", "◷", "⚙", "⏻"}
+// flashTick schedules the next poll to check whether the current flash
+// has aged out. Polling at 500ms gives sub-second toast disappearance
+// without spinning the runtime.
+func flashTick() tea.Cmd {
+	return tea.Tick(500*time.Millisecond, func(time.Time) tea.Msg {
+		return flashTickMsg{}
+	})
+}
 
-// refreshStats reloads the cached pending / release counts.
-func (m *mainModel) refreshStats() {
-	if changes, _, err := change.List(m.cfg); err == nil {
-		m.pendingCount = len(changes)
+// setFlash replaces the current toast with msg. ok=true styles success,
+// ok=false styles error. Always updates the timestamp so the toast
+// resets its 3s lifetime.
+func (m *mainModel) setFlash(msg string, ok bool) {
+	m.flash = msg
+	m.flashOK = ok
+	m.flashSetAt = time.Now()
+}
+
+// appendFlash adds extra text to the current flash, preserving the
+// original ok-state. Used by hook runners that want to layer "but X
+// also failed" onto the just-set message.
+func (m *mainModel) appendFlash(extra string, ok bool) {
+	if m.flash == "" {
+		m.flash = extra
+	} else {
+		m.flash += extra
 	}
-	if cl, err := release.Load(m.cfg); err == nil {
-		m.releaseCount = len(cl.Releases)
-		if len(cl.Releases) > 0 {
-			m.lastRelease = cl.Releases[len(cl.Releases)-1].Name
-		} else {
-			m.lastRelease = ""
-		}
-	}
+	m.flashOK = ok
+	m.flashSetAt = time.Now()
 }
 
 func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if w, ok := msg.(tea.WindowSizeMsg); ok {
-		m.width = w.Width
-		m.height = w.Height
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
 		return m, nil
-	}
-	k, ok := msg.(tea.KeyMsg)
-	if !ok {
-		return m, nil
-	}
-	switch m.screen {
-	case screenMenu:
-		return m.updateMenu(k)
-	case screenPending:
-		return m.updatePending(k)
-	case screenHistory:
-		return m.updateHistory(k)
-	case screenForm:
-		return m.updateForm(k)
-	case screenHooks:
-		return m.updateHooks(k)
-	case screenHookOutput:
-		return m.updateHookOutput(k)
+	case flashTickMsg:
+		// Auto-dismiss the toast once it's older than flashTTL.
+		if !m.flashSetAt.IsZero() && time.Since(m.flashSetAt) > flashTTL {
+			m.flash = ""
+			m.flashSetAt = time.Time{}
+		}
+		return m, flashTick()
+	case tea.KeyMsg:
+		// Capture the pre-dispatch flash so we can timestamp any change
+		// without threading setFlash through every leaf handler.
+		oldFlash := m.flash
+		var (
+			newM tea.Model
+			cmd  tea.Cmd
+		)
+		switch m.screen {
+		case screenTimeline:
+			newM, cmd = m.updateTimeline(msg)
+		case screenForm:
+			newM, cmd = m.updateForm(msg)
+		case screenHooks:
+			newM, cmd = m.updateHooks(msg)
+		case screenHookOutput:
+			newM, cmd = m.updateHookOutput(msg)
+		case screenConfirm:
+			newM, cmd = m.updateConfirm(msg)
+		default:
+			return m, nil
+		}
+		if mm, ok := newM.(mainModel); ok && mm.flash != oldFlash {
+			mm.flashSetAt = time.Now()
+			newM = mm
+		}
+		return newM, cmd
 	}
 	return m, nil
 }
 
-func (m mainModel) updateMenu(k tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch k.String() {
-	case "ctrl+c", "q":
-		return m, tea.Quit
-	case "up", "k":
-		if m.cursor > 0 {
-			m.cursor--
-		}
-	case "down", "j":
-		if m.cursor < len(m.menu)-1 {
-			m.cursor++
-		}
-	case "enter":
-		m.flash = ""
-		switch m.cursor {
-		case 0:
-			m.openForm(formChange, "Create a change", m.cfg.Changeset.Fields)
-		case 1:
-			changes, _, err := change.List(m.cfg)
-			if err != nil {
-				m.flash = err.Error()
-				m.flashOK = false
-				return m, nil
-			}
-			m.pending = changes
-			m.screen = screenPending
-		case 2:
-			if changes, _, err := change.List(m.cfg); err != nil || len(changes) == 0 {
-				m.flash = "no pending changes to release"
-				m.flashOK = false
-				return m, nil
-			}
-			cl, _ := release.Load(m.cfg)
-			m.releases = cl.History()
-			// Synthesize a "name" field as the first form slot so the same
-			// form widget handles both flows.
-			schema := make([]config.Field, 0, len(m.cfg.Release.Fields)+1)
-			schema = append(schema, config.Field{Name: "name", Type: "string"})
-			schema = append(schema, m.cfg.Release.Fields...)
-			m.openForm(formRelease, "Cut a release", schema)
-		case 3:
-			rel, err := release.Unrelease(m.cfg)
-			if err != nil {
-				m.flash = err.Error()
-				m.flashOK = false
-				return m, nil
-			}
-			m.flash = fmt.Sprintf("✦ unreleased %s — %d change(s) restored", rel.Name, len(rel.Changes))
-			m.flashOK = true
-			m.runHook(hook.EventPostUnrelease, rel, rel.Name)
-			m.refreshStats()
-		case 4:
-			cl, err := release.Load(m.cfg)
-			if err != nil {
-				m.flash = err.Error()
-				m.flashOK = false
-				return m, nil
-			}
-			m.releases = cl.History()
-			m.screen = screenHistory
-		case 5:
-			if err := m.loadHooks(); err != nil {
-				m.flash = err.Error()
-				m.flashOK = false
-				return m, nil
-			}
-			m.screen = screenHooks
-		case 6:
-			return m, tea.Quit
-		}
-	}
-	return m, nil
-}
-
-func (m mainModel) updatePending(k tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch k.String() {
-	case "ctrl+c", "q", "esc":
-		m.screen = screenMenu
-	}
-	return m, nil
-}
-
-func (m mainModel) updateHistory(k tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch k.String() {
-	case "ctrl+c", "q", "esc":
-		m.screen = screenMenu
-	}
-	return m, nil
-}
 
 // openForm prepares form state for either the change or release flow and
-// switches the screen.
+// switches the screen. Always resets edit context — call openEditForm
+// after this if you want to seed it for an existing change.
 func (m *mainModel) openForm(kind formKind, title string, schema []config.Field) {
 	m.formKind = kind
 	m.formTitle = title
@@ -394,62 +382,164 @@ func (m *mainModel) openForm(kind formKind, title string, schema []config.Field)
 		}
 	}
 	m.formCursor = 0
+	m.formChangeID = ""
 	m.screen = screenForm
+
+	// Pre-fill from declared auto-sources so the user sees the value
+	// (git.user, git.sha, etc.) before they submit and can edit it if
+	// they want. Same resolver runs again at the write boundary as a
+	// backstop, so this is purely a UX courtesy.
+	m.applyAutoSources()
+}
+
+// applyAutoSources runs the auto resolver against the current form
+// schema and seeds matching string-typed formFields with the resolved
+// values. Enum/list fields are skipped — auto sources today only
+// produce single string values.
+func (m *mainModel) applyAutoSources() {
+	resolved := map[string]any{}
+	auto.Resolve(m.cfg.ProjectRoot(), m.formSchema, resolved)
+	for i, f := range m.formSchema {
+		v, ok := resolved[f.Name]
+		if !ok {
+			continue
+		}
+		if f.Type == "enum" || f.Type == "list" {
+			continue
+		}
+		if s, ok := v.(string); ok && m.formFields[i].text == "" {
+			m.formFields[i].text = s
+		}
+	}
+}
+
+// openEditForm opens the change form pre-populated with the existing
+// values from c, and remembers c.ID so submit applies the edit instead
+// of creating a new change.
+func (m *mainModel) openEditForm(c *change.Change) {
+	m.openForm(formChange, "Edit change", m.cfg.Changeset.Fields)
+	m.formChangeID = c.ID
+	for i, f := range m.formSchema {
+		v := c.Fields[f.Name]
+		if v == nil {
+			continue
+		}
+		switch f.Type {
+		case "enum":
+			if s, ok := v.(string); ok {
+				for j, val := range f.Values {
+					if val == s {
+						m.formFields[i].picks[j] = true
+						break
+					}
+				}
+			}
+		case "list":
+			for _, item := range extractStrings(v) {
+				for j, val := range f.Values {
+					if val == item {
+						m.formFields[i].picks[j] = true
+					}
+				}
+			}
+		default:
+			if s, ok := v.(string); ok {
+				m.formFields[i].text = s
+			} else {
+				m.formFields[i].text = fmt.Sprintf("%v", v)
+			}
+		}
+	}
 }
 
 // ── views ────────────────────────────────────────────────────────────────
 
 func (m mainModel) View() string {
 	switch m.screen {
-	case screenMenu:
-		return m.viewMenu()
-	case screenPending:
-		return m.viewPending()
-	case screenHistory:
-		return m.viewHistory()
+	case screenTimeline:
+		return m.viewTimeline()
 	case screenForm:
 		return m.viewForm()
 	case screenHooks:
 		return m.viewHooks()
 	case screenHookOutput:
 		return m.viewHookOutput()
+	case screenConfirm:
+		return m.viewConfirm()
 	}
 	return ""
 }
 
-// header renders the persistent brand bar at the top of every screen.
+// header renders the persistent top band. Brand on the left, project
+// name (basename of the dir containing wtfc/) on the right. No tagline.
+// Drops the project name only if the terminal is too narrow to fit
+// both. Always one line tall.
 func (m mainModel) header() string {
-	brand := titleStyle.Render("✦ wtfc")
-	tag := dimStyle.Render("  " + tagline)
-	path := mutedStyle.Render(m.cfg.Path)
-	w := m.contentWidth()
+	w := m.termWidth()
+	const hPad = 4
+
+	brand := titleStyle.Render("wtfc")
+	project := bodyStyle.Render(filepath.Base(m.cfg.ProjectRoot()))
 	rule := mutedStyle.Render(strings.Repeat("─", w))
-	return brand + tag + "\n" + path + "\n" + rule + "\n"
+
+	left := strings.Repeat(" ", hPad) + brand
+	row := left
+	if lipgloss.Width(left)+lipgloss.Width(project)+hPad+2 <= w {
+		gap := w - lipgloss.Width(left) - lipgloss.Width(project) - hPad
+		row = left + strings.Repeat(" ", gap) + project
+	}
+	if pad := w - lipgloss.Width(row); pad > 0 {
+		row += strings.Repeat(" ", pad)
+	}
+	return "\n" + row + "\n" + rule
 }
 
-// footer renders the persistent bottom status bar with live counts and
-// the current screen's keybind hints.
+// footer renders the persistent bottom band: a hairline rule above
+// hint text right-aligned with the same 4-col side margins as the
+// header. No background fill — matches the header's visual treatment
+// so top and bottom feel like a pair.
 func (m mainModel) footer(hints string) string {
-	w := m.contentWidth()
-	pending := fmt.Sprintf("%d pending", m.pendingCount)
-	releases := fmt.Sprintf("%d releases", m.releaseCount)
-	last := "no releases yet"
-	if m.lastRelease != "" {
-		last = "last: " + m.lastRelease
+	w := m.termWidth()
+	const hPad = 4
+	rule := mutedStyle.Render(strings.Repeat("─", w))
+
+	avail := w - hPad*2
+	if avail < 0 {
+		avail = 0
 	}
-	left := lipgloss.JoinHorizontal(lipgloss.Top,
-		chipStyle.Render(pending),
-		" ",
-		dimStyle.Render(releases+" · "+last),
-	)
 	right := dimStyle.Render(hints)
-	leftLen := lipgloss.Width(left)
-	rightLen := lipgloss.Width(right)
-	gap := w - leftLen - rightLen
-	if gap < 1 {
-		gap = 1
+	if lipgloss.Width(right) > avail {
+		right = dimStyle.Render(compactHints(hints))
 	}
-	return statusBarStyle.Width(w).Render(left + strings.Repeat(" ", gap) + right)
+	if lipgloss.Width(right) > avail {
+		right = ""
+	}
+	pad := w - lipgloss.Width(right) - hPad
+	if pad < 0 {
+		pad = 0
+	}
+	row := strings.Repeat(" ", pad) + right
+	return rule + "\n" + row
+}
+
+// compactHints strips descriptions from a `key verb · key verb · …` hint
+// string, leaving just the keys joined by " · ". Falls back to the input
+// unchanged if it has no recognizable structure.
+func compactHints(full string) string {
+	if full == "" {
+		return ""
+	}
+	parts := strings.Split(full, " · ")
+	keys := make([]string, 0, len(parts))
+	for _, p := range parts {
+		// Take the first whitespace-separated token as the "key".
+		fields := strings.Fields(p)
+		if len(fields) == 0 {
+			continue
+		}
+		keys = append(keys, fields[0])
+	}
+	return strings.Join(keys, " · ")
 }
 
 // flashLine renders the success/error message that follows mutating actions.
@@ -464,112 +554,96 @@ func (m mainModel) flashLine() string {
 	return "\n" + style.Render(m.flash) + "\n"
 }
 
-// contentWidth returns the rendering width, defaulting to 80 if the terminal
-// hasn't reported a size yet.
-func (m mainModel) contentWidth() int {
-	w := m.width
-	if w <= 0 {
-		w = 80
+func (m mainModel) termWidth() int {
+	if m.width > 0 {
+		return m.width
 	}
-	if w > 100 {
-		w = 100
-	}
-	return w
+	return 80
 }
 
-// frame wraps a screen body with the standard header and footer.
-func (m mainModel) frame(body, hints string) string {
-	return m.header() + "\n" + body + "\n\n" + m.footer(hints)
-}
-
-// panel wraps body content in a rounded border. The title becomes a chip
-// stamped on the top-left corner.
-func (m mainModel) panel(title, body string) string {
-	w := m.contentWidth() - 2
-	if w < 20 {
-		w = 20
+func (m mainModel) termHeight() int {
+	if m.height > 0 {
+		return m.height
 	}
-	header := h2Style.Render(title)
-	inner := header + "\n\n" + body
-	return panelStyle.Width(w).Render(inner)
+	return 24
 }
 
-func (m mainModel) viewMenu() string {
-	var rows []string
-	for i, item := range m.menu {
-		icon := ""
-		if i < len(menuIcons) {
-			icon = menuIcons[i]
+// formatFieldValue renders any value type appropriately. Enum/list values
+// become chips; nil renders as a muted placeholder. Fields whose source
+// is "git.sha" display only the first 7 chars (the on-disk record keeps
+// the full SHA).
+func formatFieldValue(f config.Field, v any) string {
+	if v == nil {
+		return mutedStyle.Render("—")
+	}
+	switch f.Type {
+	case "enum":
+		if s, ok := v.(string); ok && s != "" {
+			return softTagStyle.Render(s)
 		}
-		// inline badges for high-signal items
-		badge := ""
-		switch i {
-		case 1: // pending
-			if m.pendingCount > 0 {
-				badge = "  " + chipStyle.Render(fmt.Sprintf("%d", m.pendingCount))
+	case "list":
+		vals := extractStrings(v)
+		if len(vals) == 0 {
+			return mutedStyle.Render("—")
+		}
+		var parts []string
+		for _, s := range vals {
+			parts = append(parts, softTagStyle.Render(s))
+		}
+		return strings.Join(parts, dimStyle.Render(", "))
+	case "bool":
+		if b, ok := v.(bool); ok {
+			if b {
+				return okStyle.Render("yes")
 			}
-		case 4: // history
-			if m.releaseCount > 0 {
-				badge = "  " + dimStyle.Render(fmt.Sprintf("(%d)", m.releaseCount))
+			return dimStyle.Render("no")
+		}
+	}
+	// Fallback for string / int / unknown: pretty-print whatever we got.
+	switch x := v.(type) {
+	case string:
+		if x == "" {
+			return mutedStyle.Render("—")
+		}
+		if f.Source == "git.sha" && len(x) > 7 {
+			x = x[:7]
+		}
+		return bodyStyle.Render(x)
+	case []any:
+		var parts []string
+		for _, it := range x {
+			parts = append(parts, fmt.Sprintf("%v", it))
+		}
+		return bodyStyle.Render(strings.Join(parts, ", "))
+	default:
+		return bodyStyle.Render(fmt.Sprintf("%v", v))
+	}
+}
+
+// extractStrings normalises an arbitrary JSON-decoded value into a slice of
+// string items. Single strings become one-element slices; arrays of strings
+// pass through; everything else returns empty.
+func extractStrings(v any) []string {
+	switch x := v.(type) {
+	case nil:
+		return nil
+	case string:
+		if x == "" {
+			return nil
+		}
+		return []string{x}
+	case []string:
+		return x
+	case []any:
+		out := make([]string, 0, len(x))
+		for _, it := range x {
+			if s, ok := it.(string); ok && s != "" {
+				out = append(out, s)
 			}
 		}
-		row := fmt.Sprintf("  %s  %s%s", icon, item, badge)
-		if i == m.cursor {
-			row = cursorStyle.Render("▶ ") + menuSelStyle.Render(icon) + "  " +
-				menuSelStyle.Render(item) + badge
-		}
-		rows = append(rows, row)
+		return out
 	}
-	body := strings.Join(rows, "\n") + m.flashLine()
-	return m.frame(m.panel("Menu", body), "↑/↓  ·  enter  ·  q quit")
-}
-
-func (m mainModel) viewPending() string {
-	var b strings.Builder
-	if len(m.pending) == 0 {
-		b.WriteString(dimStyle.Render("Nothing pending. ") +
-			bodyStyle.Render("Create a change from the menu to start tracking work."))
-	}
-	for _, c := range m.pending {
-		summary := bodyStyle.Render("(no summary)")
-		if v, ok := c.Fields["summary"].(string); ok && v != "" {
-			summary = bodyStyle.Render(v)
-		}
-		short := c.ID
-		if len(short) > 8 {
-			short = short[:8]
-		}
-		typeChip := ""
-		if t, ok := c.Fields["type"].(string); ok && t != "" {
-			typeChip = " " + chipStyle.Render(t)
-		}
-		b.WriteString(fmt.Sprintf("%s  %s  %s%s\n",
-			dimStyle.Render(c.CreatedAt.Local().Format("01-02 15:04")),
-			mutedStyle.Render(short), summary, typeChip))
-	}
-	title := fmt.Sprintf("Pending  %s", chipStyle.Render(fmt.Sprintf("%d", len(m.pending))))
-	return m.frame(m.panel(title, b.String()), "esc back")
-}
-
-func (m mainModel) viewHistory() string {
-	var b strings.Builder
-	if len(m.releases) == 0 {
-		b.WriteString(dimStyle.Render("No releases yet. ") +
-			bodyStyle.Render("Cut your first one from the menu."))
-	}
-	for i, r := range m.releases {
-		marker := mutedStyle.Render("◷")
-		if i == 0 {
-			marker = okStyle.Render("●") // freshest release glows
-		}
-		b.WriteString(fmt.Sprintf("%s  %s  %s  %s\n",
-			marker,
-			dimStyle.Render(r.ReleasedAt.Local().Format("2006-01-02")),
-			menuSelStyle.Render(r.Name),
-			dimStyle.Render(fmt.Sprintf("· %d changes", len(r.Changes)))))
-	}
-	title := fmt.Sprintf("History  %s", chipStyle.Render(fmt.Sprintf("%d", len(m.releases))))
-	return m.frame(m.panel(title, b.String()), "esc back")
+	return nil
 }
 
 // ── form (shared by change + release flows) ──────────────────────────────
@@ -597,7 +671,8 @@ func (m mainModel) updateForm(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	switch k.String() {
 	case "ctrl+c", "esc":
-		m.screen = screenMenu
+		m.formChangeID = ""
+		m.screen = screenTimeline
 		return m, nil
 
 	case "up", "shift+tab":
@@ -711,6 +786,39 @@ func (m mainModel) submitForm() (tea.Model, tea.Cmd) {
 
 	switch m.formKind {
 	case formChange:
+		// Edit path: we have an existing change to update in place.
+		if m.formChangeID != "" {
+			existing, _, err := change.FindByID(m.cfg, m.formChangeID)
+			if err != nil {
+				m.flash = err.Error()
+				m.flashOK = false
+				return m, nil
+			}
+			typed, err := change.CoerceFields(m.cfg.Changeset.Fields, values)
+			if err != nil {
+				m.flash = err.Error()
+				m.flashOK = false
+				return m, nil
+			}
+			existing.Apply(typed)
+			if err := existing.Write(m.cfg); err != nil {
+				m.flash = err.Error()
+				m.flashOK = false
+				return m, nil
+			}
+			short := existing.ID
+			if len(short) > 8 {
+				short = short[:8]
+			}
+			m.flash = fmt.Sprintf("✎ edited change %s", short)
+			m.flashOK = true
+			m.formChangeID = ""
+			m.screen = screenTimeline
+			m.refreshTimeline()
+			return m, nil
+		}
+
+		// Create path.
 		c, err := change.New(m.cfg, values)
 		if err != nil {
 			m.flash = err.Error()
@@ -728,8 +836,8 @@ func (m mainModel) submitForm() (tea.Model, tea.Cmd) {
 		}
 		m.flash = fmt.Sprintf("✎ created change %s", short)
 		m.flashOK = true
-		m.screen = screenMenu
-		m.refreshStats()
+		m.screen = screenTimeline
+		m.refreshTimeline()
 		return m, nil
 
 	case formRelease:
@@ -754,25 +862,33 @@ func (m mainModel) submitForm() (tea.Model, tea.Cmd) {
 			m.flashOK = false
 			return m, nil
 		}
-		m.flash = fmt.Sprintf("✦ released %s with %d change(s)", rel.Name, len(rel.Changes))
+		m.flash = fmt.Sprintf("◆ released %s with %d change(s)", rel.Name, len(rel.Changes))
 		m.flashOK = true
-		m.screen = screenMenu
-		m.runHook(hook.EventPostRelease, rel, rel.Name)
-		m.refreshStats()
+		m.screen = screenTimeline
+		m.runHook(hook.OpRelease, rel.Name)
+		m.refreshTimeline()
 		return m, nil
 	}
 	return m, nil
 }
 
-// runHook executes the named hook and folds the result into the flash line.
-// On hook failure the flash flips to error mode but the prior action (release
-// or unrelease) stays committed — the changelog is authoritative.
-func (m *mainModel) runHook(event string, payload any, releaseName string) {
-	res, err := hook.Run(m.cfg, event, payload, map[string]string{
+// runHook fires on-release-changed with the full Changelog as payload, after
+// any release mutation. WTFC_OP distinguishes release from unrelease so a
+// single hook script can branch if needed. Failures fold into the flash
+// line; the prior mutation stays committed (changelog is authoritative).
+func (m *mainModel) runHook(op, releaseName string) {
+	cl, err := release.Load(m.cfg)
+	if err != nil {
+		m.flash += fmt.Sprintf(" · could not load changelog for %s hook: %v", hook.EventOnReleaseChanged, err)
+		m.flashOK = false
+		return
+	}
+	res, err := hook.Run(m.cfg, hook.EventOnReleaseChanged, cl, map[string]string{
+		"WTFC_OP":           op,
 		"WTFC_RELEASE_NAME": releaseName,
 	})
 	if err != nil {
-		m.flash = fmt.Sprintf("%s — but %s hook failed: %v", m.flash, event, err)
+		m.flash = fmt.Sprintf("%s — but %s hook failed: %v", m.flash, hook.EventOnReleaseChanged, err)
 		m.flashOK = false
 		// Append last bit of stderr so the user has a clue what broke.
 		if res != nil && len(res.Stderr) > 0 {
@@ -785,18 +901,76 @@ func (m *mainModel) runHook(event string, payload any, releaseName string) {
 		return
 	}
 	if res != nil && res.Ran {
-		m.flash += fmt.Sprintf(" · %s hook ran", event)
+		m.flash += fmt.Sprintf(" · %s hook ran", hook.EventOnReleaseChanged)
 	}
 }
 
+// viewForm renders the create-change / cut-release form as a modal that
+// floats over the timeline. The timeline stays visible above and below
+// the modal so the user retains context while filling it in. Footer
+// hints switch to form-specific keys; pressing esc closes the modal.
 func (m mainModel) viewForm() string {
+	w := m.termWidth()
+	h := m.termHeight()
+	header := m.header()
+	footer := m.footer(m.formHints())
+	bodyH := h - lipgloss.Height(header) - lipgloss.Height(footer)
+	if bodyH < 4 {
+		bodyH = 4
+	}
+
+	// Background: the timeline body, scrolled to current position.
+	bgRaw, _ := m.renderTimelineBody()
+	bgLines := strings.Split(bgRaw, "\n")
+	scroll := m.timelineScroll
+	if scroll < 0 {
+		scroll = 0
+	}
+	if scroll > len(bgLines) {
+		scroll = len(bgLines)
+	}
+	end := scroll + bodyH
+	if end > len(bgLines) {
+		end = len(bgLines)
+	}
+	visible := bgLines[scroll:end]
+	for len(visible) < bodyH {
+		visible = append(visible, "")
+	}
+
+	// Grey out the backdrop so the modal pops. Strip the timeline's
+	// ANSI styling and re-render each line in a uniform muted grey —
+	// no individual element competes with the modal for attention.
+	for i, line := range visible {
+		plain := ansiCSI.ReplaceAllString(line, "")
+		if strings.TrimSpace(plain) != "" {
+			visible[i] = mutedStyle.Render(plain)
+		}
+	}
+
+	// The modal box itself.
+	modal := m.renderFormModal()
+
+	// Overlay the modal centered over the body. Modal rows replace the
+	// background rows they occupy; rows above/below show the timeline.
+	body := overlayLines(visible, modal, w)
+
+	bodyArea := lipgloss.NewStyle().Width(w).Height(bodyH).Render(strings.Join(body, "\n"))
+	return lipgloss.JoinVertical(lipgloss.Left, header, bodyArea, footer)
+}
+
+// renderFormModal builds the modal box: title, optional context (recent
+// releases for the release flow), schema fields, submit button, flash
+// line. Returns a bordered, padded multi-line string.
+func (m mainModel) renderFormModal() string {
 	var b strings.Builder
 
-	// For the release form, surface previous release names as context.
+	b.WriteString(titleStyle.Render(m.formTitle) + "\n\n")
+
 	if m.formKind == formRelease && len(m.releases) > 0 {
 		b.WriteString(dimStyle.Render("Previous releases") + "\n")
 		for i, r := range m.releases {
-			if i >= 5 {
+			if i >= 3 {
 				break
 			}
 			b.WriteString("  " + mutedStyle.Render("◷ ") +
@@ -815,19 +989,77 @@ func (m mainModel) viewForm() string {
 		label := bodyStyle.Render(f.Name)
 		if focused {
 			bullet = cursorStyle.Render("▶ ")
-			label = menuSelStyle.Render(f.Name)
+			label = cursorStyle.Render(f.Name)
 		}
-		b.WriteString(bullet + label + dimStyle.Render("  "+typeHint(f)) + "\n")
+		// Required fields get a dim "*" suffix so users see upfront
+		// which slots they must fill in. Same rule enforced on submit
+		// via config.Validate.
+		req := ""
+		if f.Required {
+			req = errStyle.Render("*")
+		}
+		b.WriteString(bullet + label + req + dimStyle.Render("  "+typeHint(f)) + "\n")
 		b.WriteString("      " + m.renderFieldValue(i, f, focused) + "\n")
 	}
 	submitFocused := m.formCursor == len(m.formSchema)
 	submitLabel := dimStyle.Render("[ submit ]")
 	if submitFocused {
-		submitLabel = okStyle.Render("[ ✦ submit ]")
+		submitLabel = okStyle.Render("[ ◆ submit ]")
 	}
 	b.WriteString("\n  " + submitLabel + "\n")
 	b.WriteString(m.flashLine())
-	return m.frame(m.panel(m.formTitle, b.String()), m.formHints())
+
+	// Size the modal generously — roughly two-thirds of the terminal,
+	// clamped between 50 and 80 cols of inner content. Padding(2,4)
+	// gives the form room to breathe inside the box.
+	modalW := m.termWidth() * 2 / 3
+	if modalW < 50 {
+		modalW = 50
+	}
+	if modalW > 80 {
+		modalW = 80
+	}
+	box := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(cBrand).
+		Padding(2, 4).
+		Width(modalW)
+	return box.Render(b.String())
+}
+
+// overlayLines centers a multi-line modal over a slice of background
+// lines and returns the composited slice. Modal rows replace the
+// corresponding background rows entirely; left padding centers the
+// modal horizontally inside `width`. Used by viewForm so the form
+// floats over the timeline backdrop without obscuring everything.
+func overlayLines(bg []string, modal string, width int) []string {
+	mLines := strings.Split(modal, "\n")
+	mH := len(mLines)
+	mW := 0
+	for _, l := range mLines {
+		if w := lipgloss.Width(l); w > mW {
+			mW = w
+		}
+	}
+	startRow := (len(bg) - mH) / 2
+	if startRow < 0 {
+		startRow = 0
+	}
+	leftPad := (width - mW) / 2
+	if leftPad < 0 {
+		leftPad = 0
+	}
+	pad := strings.Repeat(" ", leftPad)
+	out := make([]string, len(bg))
+	copy(out, bg)
+	for i, ml := range mLines {
+		row := startRow + i
+		if row < 0 || row >= len(out) {
+			continue
+		}
+		out[row] = pad + ml
+	}
+	return out
 }
 
 func typeHint(f config.Field) string {
@@ -926,7 +1158,7 @@ func (m *mainModel) loadHooks() error {
 func (m mainModel) updateHooks(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch k.String() {
 	case "ctrl+c", "q", "esc":
-		m.screen = screenMenu
+		m.screen = screenTimeline
 		return m, nil
 	case "up", "k":
 		if m.hookCursor > 0 {
@@ -990,7 +1222,10 @@ func (m mainModel) runHookTest(entry hook.Entry) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	last := cl.Releases[len(cl.Releases)-1]
-	res, runErr := hook.Run(m.cfg, entry.Event, last, map[string]string{
+	// Test fire mirrors a real on-release-changed: full Changelog as payload,
+	// WTFC_OP=release (the most common "test against latest" scenario).
+	res, runErr := hook.Run(m.cfg, entry.Event, cl, map[string]string{
+		"WTFC_OP":           hook.OpRelease,
 		"WTFC_RELEASE_NAME": last.Name,
 	})
 	var b strings.Builder
@@ -1031,36 +1266,169 @@ func (m mainModel) updateHookOutput(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// viewHooks shares the timeline's centered-screen chrome: header,
+// centered title + path, focusable hook list (status glyph, name, dim
+// description), and the same footer hint style.
 func (m mainModel) viewHooks() string {
 	var b strings.Builder
-	b.WriteString(dimStyle.Render(hook.HooksDir(m.cfg)) + "\n\n")
+
+	title := titleStyle.Render("hooks")
+	b.WriteString(m.centerPad(lipgloss.Width(title)) + title + "\n")
+	pathLabel := mutedStyle.Render(hook.HooksDir(m.cfg))
+	b.WriteString(m.centerPad(lipgloss.Width(pathLabel)) + pathLabel + "\n\n")
+
 	if len(m.hooks) == 0 {
-		b.WriteString(dimStyle.Render("No files in hooks/. ") +
-			bodyStyle.Render("Drop an executable named for an event to wire one up."))
+		empty := dimStyle.Render("no files in hooks/ — drop an executable named for an event to wire one up")
+		b.WriteString(m.centerPad(lipgloss.Width(empty)) + empty + "\n")
 	}
+
+	// Each hook entry: line 1 = focus marker + status glyph + name;
+	// line 2 = dim description, indented to align under the name.
 	for i, h := range m.hooks {
-		bullet := "  "
-		name := bodyStyle.Render(h.Name)
-		if i == m.hookCursor {
-			bullet = cursorStyle.Render("▶ ")
-			name = menuSelStyle.Render(h.Name)
+		focused := i == m.hookCursor
+		var line1 strings.Builder
+		if focused {
+			line1.WriteString(tagStyle.Bold(true).Render("▸ "))
+		} else {
+			line1.WriteString("  ")
 		}
-		b.WriteString(bullet + hookStatusGlyph(h.Status) + "  " + name + "\n")
-		b.WriteString("      " + dimStyle.Render(hookStatusDescription(h)) + "\n")
+		line1.WriteString(hookStatusGlyph(h.Status) + "  ")
+		if focused {
+			line1.WriteString(tagStyle.Bold(true).Render(h.Name))
+		} else {
+			line1.WriteString(bodyStyle.Render(h.Name))
+		}
+		l1 := line1.String()
+		l2 := "    " + mutedStyle.Render(hookStatusDescription(h))
+
+		// Center the wider of the two lines on the spine; share leftPad
+		// so the rows align.
+		blockW := lipgloss.Width(l1)
+		if w := lipgloss.Width(l2); w > blockW {
+			blockW = w
+		}
+		left := m.spineCol() - blockW/2
+		if left < 0 {
+			left = 0
+		}
+		pad := strings.Repeat(" ", left)
+		b.WriteString(pad + l1 + "\n")
+		b.WriteString(pad + l2 + "\n\n")
 	}
-	b.WriteString("\n" + dimStyle.Render("Known events:  ") +
-		bodyStyle.Render(strings.Join(hook.KnownEvents, "  ·  ")))
-	b.WriteString(m.flashLine())
-	return m.frame(m.panel("Hooks", b.String()),
-		"↑/↓  ·  e enable  ·  t test  ·  r refresh  ·  esc back")
+
+	if len(hook.KnownEvents) > 0 {
+		events := dimStyle.Render("known events: ") + softTagStyle.Render(strings.Join(hook.KnownEvents, " · "))
+		b.WriteString("\n" + m.centerPad(lipgloss.Width(events)) + events)
+	}
+
+	return m.renderScreenCentered(b.String(),
+		"↑/↓ select · e enable · t test · r refresh · esc back")
 }
 
+// viewConfirm renders a small confirmation dialog floating over a
+// dimmed timeline backdrop. Used for destructive actions (unrelease
+// today) so the user has to consciously commit instead of fat-fingering
+// a single keystroke.
+func (m mainModel) viewConfirm() string {
+	w := m.termWidth()
+	h := m.termHeight()
+	header := m.header()
+	footer := m.footer("y/enter confirm · n/esc cancel")
+	bodyH := h - lipgloss.Height(header) - lipgloss.Height(footer)
+	if bodyH < 4 {
+		bodyH = 4
+	}
+
+	// Background: dimmed timeline.
+	bgRaw, _ := m.renderTimelineBody()
+	bgLines := strings.Split(bgRaw, "\n")
+	scroll := m.timelineScroll
+	if scroll < 0 {
+		scroll = 0
+	}
+	if scroll > len(bgLines) {
+		scroll = len(bgLines)
+	}
+	end := scroll + bodyH
+	if end > len(bgLines) {
+		end = len(bgLines)
+	}
+	visible := bgLines[scroll:end]
+	for len(visible) < bodyH {
+		visible = append(visible, "")
+	}
+	for i, line := range visible {
+		plain := ansiCSI.ReplaceAllString(line, "")
+		if strings.TrimSpace(plain) != "" {
+			visible[i] = mutedStyle.Render(plain)
+		}
+	}
+
+	// Modal: small bordered box, danger-toned (destructive action).
+	title := errStyle.Render("Are you sure?")
+	prompt := bodyStyle.Render(m.confirmPrompt)
+	hint := dimStyle.Render("y/enter — confirm    n/esc — cancel")
+	content := title + "\n\n" + prompt + "\n\n" + hint
+
+	box := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(cDanger).
+		Padding(1, 3)
+	body := overlayLines(visible, box.Render(content), w)
+
+	bodyArea := lipgloss.NewStyle().Width(w).Height(bodyH).Render(strings.Join(body, "\n"))
+	return lipgloss.JoinVertical(lipgloss.Left, header, bodyArea, footer)
+}
+
+// updateConfirm handles y/n decisions for the confirmation modal. The
+// confirmKind tag determines what action runs on confirm.
+func (m mainModel) updateConfirm(k tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch k.String() {
+	case "y", "Y", "enter", " ":
+		switch m.confirmKind {
+		case "unrelease":
+			rel, err := release.Unrelease(m.cfg)
+			if err != nil {
+				m.flash = err.Error()
+				m.flashOK = false
+				m.confirmKind = ""
+				m.confirmPrompt = ""
+				m.screen = screenTimeline
+				return m, nil
+			}
+			m.flash = fmt.Sprintf("◆ unreleased %s — %d change(s) restored", rel.Name, len(rel.Changes))
+			m.flashOK = true
+			m.runHook(hook.OpUnrelease, rel.Name)
+			m.refreshTimeline()
+		}
+		m.confirmKind = ""
+		m.confirmPrompt = ""
+		m.screen = screenTimeline
+		return m, nil
+	case "n", "N", "ctrl+c", "esc":
+		m.confirmKind = ""
+		m.confirmPrompt = ""
+		m.screen = screenTimeline
+		return m, nil
+	}
+	return m, nil
+}
+
+// viewHookOutput renders the captured stdout/stderr from a hook test
+// inside the centered screen chrome, with the title centered above the
+// output block.
 func (m mainModel) viewHookOutput() string {
+	var b strings.Builder
+	title := titleStyle.Render(m.hookOutTitle)
+	b.WriteString(m.centerPad(lipgloss.Width(title)) + title + "\n\n")
+
 	body := m.hookOutput
 	if body == "" {
 		body = dimStyle.Render("(no output)")
 	}
-	return m.frame(m.panel(m.hookOutTitle, body), "esc back")
+	b.WriteString(body)
+
+	return m.renderScreenCentered(b.String(), "esc back")
 }
 
 func hookStatusGlyph(s hook.Status) string {

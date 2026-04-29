@@ -4,7 +4,7 @@ BIN    := bin/$(BINARY)
 
 .DEFAULT_GOAL := help
 
-.PHONY: help build install run tui test vet fmt tidy check clean
+.PHONY: help build install run tui mcp inspect test vet fmt tidy check clean
 
 help: ## list targets
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  \033[36m%-10s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -21,6 +21,12 @@ run: ## run with ARGS, e.g. make run ARGS="list --json"
 
 tui: ## launch the TUI (no args)
 	go run .
+
+mcp: ## run the MCP stdio server (for piping into a host)
+	go run . mcp
+
+inspect: build ## open the MCP Inspector pointed at this build
+	npx @modelcontextprotocol/inspector $(BIN) mcp
 
 test: ## run tests
 	go test $(PKG)

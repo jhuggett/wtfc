@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jhuggett/wtfc/internal/auto"
 	"github.com/jhuggett/wtfc/internal/change"
 	"github.com/jhuggett/wtfc/internal/config"
 )
@@ -110,6 +111,13 @@ func (cl *Changelog) History() []*Release {
 func Cut(cfg *config.Config, name string, fields map[string]any) (*Release, error) {
 	if strings.TrimSpace(name) == "" {
 		return nil, fmt.Errorf("release name is required")
+	}
+	// Auto-fill resolution then required-field enforcement, mirroring
+	// change.Write. User-provided values always win; missing slots get
+	// populated from declared sources (git.sha, git.branch, etc.).
+	auto.Resolve(cfg.ProjectRoot(), cfg.Release.Fields, fields)
+	if err := config.Validate(cfg.Release.Fields, fields); err != nil {
+		return nil, err
 	}
 	changes, paths, err := change.List(cfg)
 	if err != nil {

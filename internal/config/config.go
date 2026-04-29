@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/BurntSushi/toml"
 )
@@ -22,11 +23,17 @@ const (
 )
 
 // Field describes one user-defined attribute on a changeset or release.
-// All fields are optional at write time — the schema is additive.
+// The schema is additive — adding fields later doesn't break old data.
+// Required=true means the field must have a non-empty value at create
+// or release time. Source names a built-in auto-fill provider (e.g.
+// "git.user", "git.sha"); user-supplied values always win, but missing
+// slots get populated from the source at the write boundary.
 type Field struct {
-	Name   string   `toml:"name"`
-	Type   string   `toml:"type"`             // string, bool, int, enum, list
-	Values []string `toml:"values,omitempty"` // for enum/list
+	Name     string   `toml:"name"               json:"name"`
+	Type     string   `toml:"type"               json:"type"`               // string, bool, int, enum, list
+	Values   []string `toml:"values,omitempty"   json:"values,omitempty"`   // for enum/list
+	Required bool     `toml:"required,omitempty" json:"required,omitempty"` // must be set at create/release time
+	Source   string   `toml:"source,omitempty"   json:"source,omitempty"`   // auto-fill provider (e.g. "git.user")
 }
 
 type Section struct {
@@ -130,3 +137,43 @@ func FindDown(root string) ([]string, error) {
 }
 
 var ErrNotFound = errors.New("wtfc/config.toml not found")
+
+// Validate checks that every Required field in schema has a non-empty
+// value in values. Returns an error listing all missing required field
+// names, or nil if all are satisfied. Type-aware: empty strings, empty
+// lists, and missing keys all count as "not set".
+//
+// Single source of truth for required-field enforcement — TUI form
+// submit, CLI commands, and MCP tool handlers all call this so the
+// rules are identical across entry points.
+func Validate(schema []Field, values map[string]any) error {
+	var missing []string
+	for _, f := range schema {
+		if !f.Required {
+			continue
+		}
+		v, ok := values[f.Name]
+		if !ok || v == nil {
+			missing = append(missing, f.Name)
+			continue
+		}
+		switch x := v.(type) {
+		case string:
+			if strings.TrimSpace(x) == "" {
+				missing = append(missing, f.Name)
+			}
+		case []any:
+			if len(x) == 0 {
+				missing = append(missing, f.Name)
+			}
+		case []string:
+			if len(x) == 0 {
+				missing = append(missing, f.Name)
+			}
+		}
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("missing required field(s): %s", strings.Join(missing, ", "))
+	}
+	return nil
+}

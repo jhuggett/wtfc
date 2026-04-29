@@ -1,15 +1,24 @@
 # wtfc config — defines the schema for changes and releases.
-# All fields are optional. Add new ones any time; old data is preserved.
+#
+# Field attributes:
+#   required = true        must be set at create / release time
+#   source   = "name"      auto-fill from a built-in source if unset
+#                          (git.user, git.email, git.sha, git.branch,
+#                          system.user). User-provided values always win.
 
 [changeset]
 fields = [
-  { name = "summary",  type = "string" },
-  { name = "type",     type = "enum", values = ["feat", "fix", "chore"] },
-  { name = "audience", type = "list", values = ["public", "internal"] },
+  { name = "summary",  type = "string", required = true },
+  { name = "type",     type = "enum",   values = ["feat", "fix", "chore"], required = true },
+  { name = "audience", type = "list",   values = ["public", "internal"] },
+  { name = "author",   type = "string", source = "git.user" },
+  { name = "commit",   type = "string", source = "git.sha" },
+  { name = "branch",   type = "string", source = "git.branch" },
 ]
 
 [release]
 fields = [
   { name = "notes",    type = "string" },
-  { name = "audience", type = "list", values = ["public", "internal"] },
+  { name = "audience", type = "list",   values = ["public", "internal"] },
+  { name = "commit",   type = "string", source = "git.sha" },
 ]

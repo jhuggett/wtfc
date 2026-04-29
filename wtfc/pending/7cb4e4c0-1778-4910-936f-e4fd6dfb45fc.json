@@ -1,0 +1,12 @@
+{
+  "audience": [
+    "public"
+  ],
+  "author": null,
+  "branch": null,
+  "commit": null,
+  "created_at": "2026-04-29T02:33:52.479585Z",
+  "id": "7cb4e4c0-1778-4910-936f-e4fd6dfb45fc",
+  "summary": "document release-side auto-fill, CHANGELOG.md sample output, and link to dogfooded CHANGELOG.md in README",
+  "type": "chore"
+}
